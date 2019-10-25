@@ -87,6 +87,3 @@ def main():
     for run in runs:
         job = Job(run, config, args.calib)
         job.batch(args.test)
-
-if __name__ == "__main__":
-    main()

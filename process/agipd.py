@@ -69,13 +69,13 @@ class AGIPDVDS(object):
 
 class AGIPDCalib(object):
     GAIN = np.array([config.HG_GAIN, config.MG_GAIN])
-    FLAT_ROI = (0, 10)
+    FLAT_ROI = (0, 20)
     OUT_GROUP = config.AGIPD_CALIB_KEY
 
     def __init__(self, vds_file, dark):
         self.vds_file, self.dark = vds_file, dark
         self._init_adu()
-        self._flat_correct()
+        self._baseline_correct()
         self._init_mask()
         self.data = ((self.adu * self.mask).T * self.GAIN).T
 
@@ -92,9 +92,9 @@ class AGIPDCalib(object):
         self.adu = np.stack((hg_adus, mg_adus))
         print("Done, ADU data shape: {}".format(self.adu.shape))
 
-    def _flat_correct(self):
+    def _baseline_correct(self):
         print("Baseline correcting...")
-        self.zero_levels = self.adu[0, :, self.FLAT_ROI[0]:self.FLAT_ROI[1]].mean(axis=(2, 3))
+        self.zero_levels = np.mean(self.adu[0, :, :, self.FLAT_ROI[0]:self.FLAT_ROI[1]], axis=(2, 3))
         self.adu[0] = (self.adu[0].T - self.zero_levels.T).T
         print("Done, zero levels: {}".format(self.zero_levels.mean(axis=0)))
 
