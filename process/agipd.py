@@ -4,17 +4,17 @@ agipd.py - Apply AGIPD dark calibration
 import argparse
 import numpy as np
 import h5py
+from abc import ABCMeta, abstractmethod
 from .. import config
 
-class DarkAGIPD(object):
+class DarkAGIPD(object, metaclass=ABCMeta):
     OFFSET_KEY = config.OFFSET_KEY
     BADMASK_KEY = config.BADMASK_KEY
     GAIN_LEVEL_KEY = config.GAIN_LEVEL_KEY
     MODULE_SHAPE = config.MODULE_SHAPE
 
-    def __init__(self, filename, mask_inv=True):
+    def __init__(self, filename):
         self.data_file = h5py.File(filename, 'r')
-        self.mask_inv = mask_inv
 
     def offset(self, gain_mode, cell_id, module_id):
         return self.data_file[self.OFFSET_KEY][gain_mode, cell_id, module_id]
@@ -22,10 +22,20 @@ class DarkAGIPD(object):
     def gain_level(self, gain_mode, cell_id, module_id):
         return self.data_file[self.GAIN_LEVEL_KEY][gain_mode, cell_id, module_id]
 
+    @abstractmethod
+    def bad_mask(self, module_id):
+        pass
+
+class DarkAGIPDNew(DarkAGIPD):
     def bad_mask(self, module_id):
         idxs = (slice(self.MODULE_SHAPE[0] * module_id, self.MODULE_SHAPE[0] * (module_id + 1)),)
         bad_mask = self.data_file[self.BADMASK_KEY][idxs]
-        return 1 - bad_mask if self.mask_inv else bad_mask
+        return bad_mask
+
+class DarkAGIPDOld(DarkAGIPD):
+    def bad_mask(self, module_id):
+        bad_mask = self.data_file[self.BADMASK_KEY][:, :, module_id].any(axis=(0, 1))
+        return bad_mask
 
 class AGIPDVDS(object):
     TRAIN_KEY = config.AGIPD_TRAIN_KEY
@@ -129,7 +139,13 @@ def apply_dark(path, dark_path):
     dark_path - path to dark AGIPD calibration file
     """
     vds_file = AGIPDVDS(path)
-    dark = DarkAGIPD(dark_path)
+    bad_mask_shape = h5py.File(dark_path, 'r')[config.BADMASK_KEY].shape
+    if len(bad_mask_shape) == 2:
+        print("Using a new type dark file: {}".format(dark_path))
+        dark = DarkAGIPDNew(dark_path)
+    else:
+        print("Using an old type dark file: {}".format(dark_path))
+        dark = DarkAGIPDOld(dark_path)
     calib_data = AGIPDCalib(vds_file, dark)
     vds_file.close()
     print("Saving calibrated data to {}".format(path))
